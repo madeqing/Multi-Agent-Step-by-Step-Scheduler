@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0",
+  "source_of_truth": "status.json",
+  "task_meta": {
+    "task_id": null,
+    "task_title": null,
+    "aliases": [],
+    "original_prompt": null,
+    "task_root": null,
+    "role_map_version": null,
+    "log_version": "v3",
+    "created_at": null,
+    "updated_at": null
+  },
+  "current_snapshot": {
+    "task_status": null,
+    "current_phase": null,
+    "current_step_id": null,
+    "current_step_title": null,
+    "current_step_status": null,
+    "current_owner": null,
+    "last_event_id": null,
+    "last_event_time": null,
+    "last_review_time": null,
+    "last_review_result": null,
+    "last_review_issue_count": 0,
+    "open_blockers": [],
+    "current_risks": [],
+    "pending_questions": [],
+    "final_artifact_path": null,
+    "final_export_path": null,
+    "ready_for_user_confirm": false,
+    "user_confirmation_needed": false
+  },
+  "current_step": {
+    "step_id": null,
+    "title": null,
+    "owner": null,
+    "goal": null,
+    "inputs": [],
+    "constraints": [],
+    "expected_output": [],
+    "status": null,
+    "started_at": null,
+    "finished_at": null,
+    "packet_ref": {
+      "step_packet": null,
+      "dev_contract": null,
+      "review_packet": null
+    },
+    "implementation_summary": null,
+    "review_summary": null,
+    "decision": null,
+    "known_risks": [],
+    "follow_up": [],
+    "related_files": [],
+    "review_ref": null
+  },
+  "latest_review": {
+    "review_time": null,
+    "reviewer": "tester",
+    "review_basis": {
+      "step_packet": null,
+      "dev_agents": [],
+      "dev_soul": null,
+      "shared_constraints": []
+    },
+    "reviewer_policy_reference": {
+      "tester_agents": [],
+      "tester_soul": null
+    },
+    "dev_submission_summary": {
+      "modified_files": [],
+      "implementation_summary": null,
+      "verification_method": null,
+      "known_risks": []
+    },
+    "checks_performed": {
+      "contract_compliance": false,
+      "scope_boundary": false,
+      "acceptance_criteria": false,
+      "coverage_edge_cases": false,
+      "tests_static_review": false,
+      "regression_side_effects": false
+    },
+    "conclusion": null,
+    "basis": null,
+    "reason": null,
+    "fix_mode": null,
+    "need_recheck": false,
+    "can_proceed": false,
+    "issue_count": 0,
+    "issue_list": [],
+    "review_notes": {
+      "summary": null,
+      "next_action": null,
+      "notes": null
+    }
+  },
+  "closure_snapshot": {
+    "task_closed": false,
+    "final_step_id": null,
+    "total_attempts": 0,
+    "step_closed": false,
+    "final_result": null,
+    "if_failed_pause_reason": null,
+    "next_action": null,
+    "closed_at": null,
+    "closure_reason": null,
+    "final_artifact_path": null,
+    "final_export_path": null,
+    "ready_for_user_confirm": false,
+    "user_confirmation_needed": false,
+    "remaining_risks": [],
+    "archive_location": null,
+    "notes": null
+  },
+  "sync": {
+    "status_path": "status.json",
+    "log_path": "log.md",
+    "review_path_template": "reviews/Sx.md",
+    "last_synced_at": null,
+    "last_synced_event_id": null,
+    "last_synced_review_attempt": null
+  }
+}
