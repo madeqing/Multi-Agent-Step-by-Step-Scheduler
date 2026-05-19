@@ -1,0 +1,21 @@
+{
+  "schema": "workflow/steps",
+  "schema_version": 3,
+  "task_id": "",
+  "task_title": "",
+  "aliases": [],
+  "original_prompt": "",
+  "task_root": "",
+  "current_step_id": null,
+  "step_entry_template": {
+    "step_id": "",
+    "title": "",
+    "goal": "",
+    "allowed_files": [],
+    "acceptance_criteria": [],
+    "dependencies": [],
+    "status": "pending",
+    "attempts": 0
+  },
+  "steps": []
+}
