@@ -98,9 +98,13 @@
 3. 恢复或新建 task workspace
 4. 更新 `workflow/active-task.json`
 5. 更新 `workflow/task-index.json`
-6. 在当前 task workspace 中发现并绑定 dev/tester 角色契约
-7. 写入当前 task 的 `role-map.json`
-8. 初始化或更新当前 task 的 `plan.md`、`steps.json`、`status.json`
+6. 扫描当前 task workspace 中已存在的 dev/tester 角色契约来源，解析后仅更新当前 task 的 `role-map.json`
+   - **禁止创建新的角色契约文件**
+   - **禁止拆分生成独立的 dev/tester agents.md 文件**
+   - **禁止用新文件替代已有契约来源**
+   - 角色契约来源优先级：skill 级别 `dev.md` / `tester.md` > workspace 已有局部契约
+   - 扫描结果写入 `role-map.json`，记录每个角色契约的实际来源路径
+7. 根据扫描结果，初始化或更新当前 task 的 `plan.md`、`steps.json`、`status.json`、`log.md`
 9. 激活第一个步骤并写入当前 task 的 `log.md`
 10. 只向 Dev 发送当前 step packet
 11. 收到 Dev 结果后，组织 Tester 审查

@@ -85,6 +85,215 @@ def step_row(row: sqlite3.Row) -> dict:
     return d
 
 
+def cmd_finalize(task_id: str, db_path: Optional[Path]):
+    """Generate final.md from DB data."""
+    import uuid
+
+    conn = get_db(db_path)
+
+    task = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+    if not task:
+        print(f"Task not found: {task_id}")
+        conn.close()
+        sys.exit(1)
+    td = task_row(task)
+
+    steps = conn.execute(
+        "SELECT * FROM steps WHERE task_id = ? ORDER BY step_order",
+        (task_id,)
+    ).fetchall()
+
+    events = conn.execute(
+        "SELECT * FROM event_log WHERE task_id = ? ORDER BY created_at",
+        (task_id,)
+    ).fetchall()
+
+    all_reviews = {}
+    for s in steps:
+        sd = step_row(s)
+        revs = conn.execute(
+            "SELECT * FROM reviews WHERE step_id = ? ORDER BY review_time",
+            (sd["step_id"],)
+        ).fetchall()
+        all_reviews[sd["step_id"]] = [dict(r) for r in revs]
+
+    conn.close()
+
+    # Build final.md content
+    lines = []
+    WIDTH = 80
+
+    def hr():
+        lines.append("=" * WIDTH)
+
+    def h1(text):
+        lines.append("")
+        lines.append(f"# {text}")
+        lines.append("")
+
+    def h2(text):
+        lines.append(f"## {text}")
+
+    def row(label, value):
+        lines.append(f"- **{label}**: {value}")
+
+    def code(text):
+        lines.append(f"```\n{text}\n```")
+
+    # ---- Header ----
+    lines.append(f"<!-- final.md v2 generated at {now_iso()} by multi-agent-scheduler -->")
+    hr()
+    lines.append(f"# {td['task_title']}")
+    lines.append(f"> **Task ID**: `{task_id}`  |  **Status**: `{td['task_status']}`  |  **Root**: `{td['task_root']}`")
+    hr()
+
+    h1("任务概述")
+    lines.append(f"**原始需求**: {td['original_prompt'] or '（无）'}")
+    lines.append("")
+    lines.append(f"| 字段 | 值 |")
+    lines.append("|------|-----|")
+    row("创建时间", td["created_at"])
+    row("更新时间", td["updated_at"])
+    row("任务状态", td["task_status"])
+    row("最终产物", td["final_artifact_path"] or "（未设置）")
+    row("导出路径", td["final_export_path"] or "（未设置）")
+    if td.get("aliases"):
+        aliases = td["aliases"] if isinstance(td["aliases"], list) else json.loads(td["aliases"])
+        row("别名", ", ".join(aliases) if aliases else "（无）")
+
+    # ---- Steps Summary ----
+    h1("步骤执行摘要")
+    lines.append("")
+    lines.append(f"| # | 步骤 | 状态 | 尝试次数 | 决策 | 耗时 |")
+    lines.append("|---|------|------|---------|------|------|")
+    for s in steps:
+        sd = step_row(s)
+        started = sd["started_at"][:16] if sd["started_at"] else "—"
+        finished = sd["finished_at"][:16] if sd["finished_at"] else "—"
+        # calc duration
+        duration = "—"
+        if sd["started_at"] and sd["finished_at"]:
+            try:
+                fmt = "%Y-%m-%dT%H:%M:%S.%fZ"
+                t0 = datetime.fromisoformat(sd["started_at"].replace("Z", "+00:00"))
+                t1 = datetime.fromisoformat(sd["finished_at"].replace("Z", "+00:00"))
+                delta = t1 - t0
+                total_s = delta.total_seconds()
+                if total_s >= 60:
+                    duration = f"{int(total_s // 60)}m {int(total_s % 60)}s"
+                else:
+                    duration = f"{int(total_s)}s"
+            except Exception:
+                duration = "?"
+        lines.append(
+            f"| {sd['step_order']} | {sd['title']} | "
+            f"`{sd['status']}` | {sd['attempts']} | `{sd['decision']}` | {duration} |"
+        )
+
+    # ---- Step Details ----
+    h1("步骤详情")
+    for s in steps:
+        sd = step_row(s)
+        h2(f"Step {sd['step_order']}: {sd['title']}")
+        lines.append(f"**Step ID**: `{sd['step_id']}`  |  **Owner**: {sd['owner']}  |  **Status**: `{sd['status']}`")
+        lines.append("")
+
+        if sd["goal"]:
+            lines.append(f"**Goal**: {sd['goal']}")
+            lines.append("")
+
+        ac_list = sd.get("acceptance_criteria", [])
+        if isinstance(ac_list, str):
+            try:
+                ac_list = json.loads(ac_list)
+            except Exception:
+                ac_list = [ac_list]
+        if ac_list:
+            lines.append("**验收标准**:")
+            for i, ac in enumerate(ac_list, 1):
+                lines.append(f"  {i}. {ac}")
+            lines.append("")
+
+        if sd["implementation_summary"]:
+            lines.append(f"**实现摘要**: {sd['implementation_summary']}")
+            lines.append("")
+
+        revs = all_reviews.get(sd["step_id"], [])
+        if revs:
+            lines.append(f"**审查记录** ({len(revs)} 次):")
+            for i, r in enumerate(revs, 1):
+                review_time = r["review_time"][:16] if r["review_time"] else "—"
+                conclusion = r["conclusion"]
+                reason = r["reason"] or "（无）"
+                issue_count = r["issue_count"]
+                lines.append(f"  {i}. [{conclusion}] {review_time}  — {reason}")
+                if issue_count > 0:
+                    issue_list = r.get("issue_list", [])
+                    if isinstance(issue_list, str):
+                        try:
+                            issue_list = json.loads(issue_list)
+                        except Exception:
+                            issue_list = [issue_list]
+                    for issue in issue_list:
+                        lines.append(f"     - {issue}")
+            lines.append("")
+
+        if sd["allowed_files"]:
+            af = sd["allowed_files"]
+            if isinstance(af, str):
+                try:
+                    af = json.loads(af)
+                except Exception:
+                    af = [af]
+            if af:
+                lines.append(f"**允许修改的文件**: {', '.join(af)}")
+                lines.append("")
+
+    # ---- Event Log ----
+    h1("事件审计日志")
+    if events:
+        lines.append(f"| 时间 | 事件类型 | 执行者 | 详情 |")
+        lines.append("|------|---------|------|------|")
+        for e in events:
+            lines.append(
+                f"| {e['created_at'][:16]} | `{e['event_type']}` | {e['actor']} | {e['detail'][:60]} |"
+            )
+    else:
+        lines.append("（无事件记录）")
+
+    # ---- Footer ----
+    lines.append("")
+    hr()
+    lines.append(f"> Generated by multi-agent-scheduler v2.2.0 at {now_iso()}")
+    hr()
+
+    content = "\n".join(lines) + "\n"
+
+    # Determine output path
+    if td["final_export_path"]:
+        out_path = Path(td["final_export_path"])
+    elif td["task_root"]:
+        out_path = Path(td["task_root"]) / "final.md"
+    else:
+        out_path = Path(f"final-{task_id}.md")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(content, encoding="utf-8")
+
+    # Also update final_export_path in DB
+    conn2 = get_db(db_path)
+    conn2.execute(
+        "UPDATE tasks SET final_export_path = ?, updated_at = ? WHERE task_id = ?",
+        (str(out_path), now_iso(), task_id),
+    )
+    conn2.commit()
+    conn2.close()
+
+    print(f"✓ final.md generated: {out_path}")
+    print(f"  Path: {out_path}")
+    print(f"  Size: {len(content)} bytes")
+
+
 # ---------------------------------------------------------------------------
 # Init
 # ---------------------------------------------------------------------------
@@ -798,6 +1007,10 @@ def main():
     p = sub.add_parser("import-json", help="Import from legacy JSON")
     p.add_argument("json_dir")
 
+    # finalize
+    p = sub.add_parser("finalize", help="Generate final.md from DB data")
+    p.add_argument("task_id")
+
     args = parser.parse_args()
     db = Path(args.db_path) if args.db_path else None
 
@@ -818,6 +1031,7 @@ def main():
         "events":        lambda: cmd_events(args.task_id, db),
         "log":           lambda: cmd_log(args.task_id, args.event_type, db, args.detail),
         "import-json":   lambda: cmd_import_json(args.json_dir, db),
+        "finalize":      lambda: cmd_finalize(args.task_id, db),
     }
     cmds[args.command]()
 
