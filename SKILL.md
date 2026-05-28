@@ -14,6 +14,9 @@ trigger:
     - 分步开发
     - 逐步审查
     - multi-agent
+    - 任务分步
+    - 逐步派发
+    - dev tester
   scenarios:
     - 复杂任务需要多步骤审查
     - Dev + Tester 协作模式
@@ -83,7 +86,7 @@ python3 scripts/task_ops.py init
 python3 scripts/task_ops.py init --db-path /path/to/custom.db
 ```
 
-> **注意**：`init` 命令不接受 `--verify` 参数（该参数不存在）。验证数据库完整性直接运行 `init`，成功无报错即完整。
+> **注意**：`task_ops.py init` 不支持 `--verify`。如需仅验证数据库完整性，使用 `python3 scripts/init_db.py --verify`。
 
 ### 2.2 任务管理命令
 
@@ -220,8 +223,10 @@ python3 scripts/task_ops.py step-add <task_id> "Step 1: 基础架构" \
   --ac "有项目结构文档" "有接口定义" \
   --allowed-files "/path/to/index.html" \
   --owner dev
-# 重复添加所有步骤...
+# 对每个步骤重复调用 step-add（无需按顺序，后添加的步骤自动排到最后）
 ```
+
+> **批量添加**：每个步骤单独调用一次 `step-add`，无需按顺序操作。步骤 ID 自动递增（S1, S2, …）。
 
 ### Step 4: 激活任务，开始第一步
 
@@ -229,6 +234,8 @@ python3 scripts/task_ops.py step-add <task_id> "Step 1: 基础架构" \
 python3 scripts/task_ops.py activate <task_id>
 python3 scripts/task_ops.py step-active S1
 ```
+
+> **顺序**：`activate` 先于 `step-active`。`activate` 设任务为 running 状态，`step-active` 才真正开始第一步执行。
 
 ### Step 5: Dev 执行，Tester 审查
 
@@ -256,12 +263,23 @@ Tester 输出 FAIL
        ▼
  记录失败原因（review-add）
        │
-       ▼
- Dev 修复 → step-active S1 → 重新审查
+       ├─ delegate_task 派发 Dev 修复
+       │       │
+       │       ▼
+       │  正常完成 → step-active 重新审查
        │
-       ▼
- 同一步骤 4 次 FAIL → 暂停任务，通知用户
+       └─ delegate_task 超时（修复点精确1-3文件）
+               │
+               ▼
+         Leader 直接用 patch 介入（记录 leader_fallback 事件）
+               │
+               ▼
+         通知用户发生了回退
+
+同一步骤连续 4 次正式 FAIL → 暂停任务，通知用户决策
 ```
+
+> 详见 6.2 节 `delegate_task` 超时时的 Leader 回退策略。
 
 ### Step 7: PASS 处理
 
@@ -308,9 +326,19 @@ Tester 输出 FAIL
 
 ## 六、陷阱与注意事项
 
-### 6.1 `init --verify` 参数不存在
+### 6.1 `--verify` 参数的适用范围
 
-文档曾错误记载 `python3 task_ops.py init --verify`，但该参数不存在。验证数据库完整性直接运行 `init`，成功无报错即完整。
+- **`task_ops.py init`**：调用 `init_db()` 函数，不支持 `--verify` 参数
+- **`scripts/init_db.py`**（直接调用）：支持 `--verify`，仅验证数据库完整性不修改
+
+正确用法：
+```bash
+# task_ops.py — 初始化数据库
+python3 scripts/task_ops.py init
+
+# init_db.py — 仅验证（不修改）
+python3 scripts/init_db.py --verify
+```
 
 ### 6.2 `delegate_task` 超时时的回退策略
 
@@ -322,6 +350,17 @@ Tester 输出 FAIL
 - 修复逻辑已由 Tester 分析清楚
 
 回退后仍需记录事件日志，并通知用户发生了回退。
+
+### 6.3 其他常见异常
+
+| 场景 | 处理方式 |
+|------|---------|
+| 数据库文件不存在 | 自动创建（`init` 时），路径错误时用 `--db-path` 指定 |
+| `step-active` 时任务未激活 | 提示先运行 `activate`，按正确顺序执行 |
+| 步骤ID写错（如 `S0` 不存在） | `task_ops.py list` 查看实际步骤ID |
+| `task-set` 更新了非法字段 | 查看命令帮助确认可用字段列表 |
+| 用户要求跳过某步骤 | 不允许，FAIL 后修复继续，步骤不可跳过 |
+| delegate_task 超时但修复范围大 | 不使用 fallback，继续重试 delegate 或暂停任务让用户决策 |
 
 ## 七、事件类型参考
 
@@ -375,8 +414,6 @@ multi-agent-scheduler/
 │       └── reviews/Sx.md
 └── deliverables/              # 最终交付物归档
 ```
-
-## 十一、参考资料
 
 ## 十、数据库路径
 
